@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed as rowItemsIndexed
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -297,6 +299,10 @@ private fun TvVideoCard(
 ) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) 1.06f else 1f, label = "tv-card-scale")
+    val bringIntoView = remember { BringIntoViewRequester() }
+    LaunchedEffect(focused) {
+        if (focused) runCatching { bringIntoView.bringIntoView() }
+    }
     Column(
         Modifier
             .width(220.dp)
@@ -304,6 +310,7 @@ private fun TvVideoCard(
                 scaleX = scale
                 scaleY = scale
             }
+            .bringIntoViewRequester(bringIntoView)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { focused = it.isFocused }
             .focusable()
@@ -340,9 +347,14 @@ private fun TvPostRow(posts: List<Post>, onPost: (String) -> Unit) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
         rowItemsIndexed(posts) { _, post ->
             var focused by remember { mutableStateOf(false) }
+            val bringIntoView = remember { BringIntoViewRequester() }
+            LaunchedEffect(focused) {
+                if (focused) runCatching { bringIntoView.bringIntoView() }
+            }
             Column(
                 Modifier
                     .width(300.dp)
+                    .bringIntoViewRequester(bringIntoView)
                     .onFocusChanged { focused = it.isFocused }
                     .focusable()
                     .tvKey { onPost(post.id) }
@@ -642,6 +654,10 @@ private fun TvSmallButton(
 ) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) 1.08f else 1f, label = "tv-small-scale")
+    val bringIntoView = remember { BringIntoViewRequester() }
+    LaunchedEffect(focused) {
+        if (focused) runCatching { bringIntoView.bringIntoView() }
+    }
     Text(
         text = text,
         color = when {
@@ -655,6 +671,7 @@ private fun TvSmallButton(
                 scaleX = scale
                 scaleY = scale
             }
+            .bringIntoViewRequester(bringIntoView)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { focused = it.isFocused }
             .focusable(enabled = enabled)
