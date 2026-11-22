@@ -40,12 +40,33 @@ jobs:
           cp android/app/build/outputs/apk/tv/debug/app-tv-debug.apk out/HGTV-tv-debug.apk
           ls -lh out
 
+      - name: Verify bundled web assets
+        run: |
+          unzip -l out/HGTV-phone-debug.apk | grep -q 'assets/web/index.html'
+          unzip -l out/HGTV-phone-debug.apk | grep -q 'assets/web/app.js'
+          unzip -l out/HGTV-tv-debug.apk | grep -q 'assets/tv-nav.js'
+
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
           name: HGTV-APK-${{ github.run_number }}
           path: out/*.apk
           if-no-files-found: error
+
+      - name: Publish latest APKs to Releases
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: HGTV latest build
+          body: |
+            自动构建（commit `${{ github.sha }}`）
+
+            - 手机：`HGTV-phone-debug.apk`
+            - Android TV：`HGTV-tv-debug.apk`
+          files: out/*.apk
+          make_latest: true
+          overwrite_files: true
 
       - name: Attach APKs to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')

@@ -50,12 +50,18 @@ android/app/build/outputs/apk/tv/debug/app-tv-debug.apk
 
 推送到 `main` 后自动运行 `.github/workflows/android.yml`：
 
-1. 安装 JDK 17 / Android SDK 35 / Gradle 8.9
+1. 安装 JDK 17 / Gradle 8.9（Android SDK 使用 runner 预装版本）
 2. 构建 `phone` 与 `tv` 两个 flavor 的 debug APK
 3. 上传为 Actions Artifact：`HGTV-APK-<run_number>`
-4. 打 `v*` 标签时自动把两个 APK 附到 GitHub Release
+4. 同时发布一个滚动 Release `latest`，可直接下载：
+   - [HGTV-phone-debug.apk](https://github.com/WLGH01/HGTV/releases/latest/download/HGTV-phone-debug.apk)
+   - [HGTV-tv-debug.apk](https://github.com/WLGH01/HGTV/releases/latest/download/HGTV-tv-debug.apk)
 
-在 Actions 页面打开对应运行记录，底部 Artifacts 即可下载 APK。
+### TV 遥控器
+
+TV flavor 会在页面加载完成后注入 `tv-nav.js`：给 `.card` 补 `tabindex`，
+方向键按屏幕位置做空间导航，Enter 打开卡片，焦点有黄色高亮。
+手机 flavor 不注入，桌面浏览器行为不受影响。
 
 ## 说明
 

@@ -87,6 +87,11 @@ class MainActivity : Activity() {
             @Deprecated("Deprecated in Java")
             override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean =
                 handleUrl(Uri.parse(url))
+
+            override fun onPageFinished(view: WebView, url: String) {
+                super.onPageFinished(view, url)
+                injectTvNav()
+            }
         }
 
         webView.webChromeClient = object : WebChromeClient() {
@@ -145,6 +150,16 @@ class MainActivity : Activity() {
             startActivity(Intent(Intent.ACTION_VIEW, uri))
             true
         }.getOrDefault(false)
+    }
+
+    private fun injectTvNav() {
+        if (BuildConfig.FLAVOR != "tv") return
+        try {
+            val js = assets.open("tv-nav.js").bufferedReader(Charsets.UTF_8).use { it.readText() }
+            webView.evaluateJavascript(js, null)
+        } catch (_: Exception) {
+            // 注入失败不影响正常播放
+        }
     }
 
     private fun hideCustomView() {
