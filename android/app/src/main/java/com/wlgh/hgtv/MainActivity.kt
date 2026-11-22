@@ -13,10 +13,12 @@ import android.webkit.CookieManager
 import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import androidx.webkit.WebViewAssetLoader
 
 /**
  * 极简 WebView 壳：直接加载已修好的黄果解析站。
@@ -34,6 +36,12 @@ class MainActivity : Activity() {
     private lateinit var root: FrameLayout
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
+
+    private val assetLoader by lazy {
+        WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+            .build()
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,6 +78,9 @@ class MainActivity : Activity() {
         webView.requestFocus()
 
         webView.webViewClient = object : WebViewClient() {
+            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+                assetLoader.shouldInterceptRequest(request.url)
+
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
                 handleUrl(request.url)
 
@@ -127,7 +138,8 @@ class MainActivity : Activity() {
         val host = uri.host?.lowercase() ?: return false
         val internal = host.endsWith("github.io") ||
             host.endsWith("huangguoai.io") ||
-            host.endsWith("huangguoai.com")
+            host.endsWith("huangguoai.com") ||
+            host == "appassets.androidplatform.net"
         if (internal) return false
         return runCatching {
             startActivity(Intent(Intent.ACTION_VIEW, uri))

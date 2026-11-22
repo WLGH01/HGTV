@@ -38,16 +38,12 @@ android/app/build/outputs/apk/tv/debug/app-tv-debug.apk
 - 手机版：`com.wlgh.hgtv`，普通桌面图标
 - TV 版：`com.wlgh.hgtv.tv`，带 `LEANBACK_LAUNCHER` 和 TV banner，可用遥控器操作
 
-默认加载地址在 `android/app/build.gradle.kts` 里：
+默认加载 **APK 内置**的网页：构建时 `web/` 会自动同步到 `android/app/src/main/assets/web/`，通过 `WebViewAssetLoader` 以 `https://appassets.androidplatform.net/...` 提供，因此是安全上下文，也不依赖线上 Pages 是否已更新。
 
-```kotlin
-https://drdrdrrddrdr.github.io/huangguo-web/
-```
-
-也可以构建时覆盖：
+需要调试线上版本时，可以覆盖加载地址：
 
 ```bash
-./gradlew :app:assemblePhoneDebug -Phgtv.siteUrl=https://example.com/
+./gradlew :app:assemblePhoneDebug -Phgtv.siteUrl=https://drdrdrrddrdr.github.io/huangguo-web/
 ```
 
 ### GitHub Actions
