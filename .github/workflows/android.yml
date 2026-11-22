@@ -31,7 +31,19 @@ jobs:
 
       - name: Build phone and TV debug APKs
         working-directory: android
-        run: gradle :app:assemblePhoneDebug :app:assembleTvDebug --no-daemon --stacktrace
+        run: |
+          set -o pipefail
+          gradle :app:assemblePhoneDebug :app:assembleTvDebug --no-daemon --stacktrace 2>&1 | tee build.log
+
+      - name: Publish build log on failure
+        if: failure()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-log
+          name: Build log
+          body: "最近一次失败构建的 Gradle 日志"
+          files: android/build.log
+          overwrite_files: true
 
       - name: Collect APKs
         run: |
