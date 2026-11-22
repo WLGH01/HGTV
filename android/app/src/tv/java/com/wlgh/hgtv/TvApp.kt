@@ -446,13 +446,9 @@ private fun TvDetail(
                     Spacer(Modifier.height(20.dp))
                     Text("选集 · ${v.episodes.size} 集", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(8.dp))
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        v.episodes.chunked(8).forEach { row ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                row.forEach { episode ->
-                                    TvSmallButton("${episode.num}") { onPlay(v, episode.num) }
-                                }
-                            }
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        rowItemsIndexed(v.episodes) { _, episode ->
+                            TvSmallButton("${episode.num}") { onPlay(v, episode.num) }
                         }
                     }
                 }
