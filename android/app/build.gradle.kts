@@ -1,18 +1,8 @@
-import org.gradle.api.tasks.Sync
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
-
-// 每次构建前把仓库根目录的 web/ 同步进 assets，
-// 保证 APK 里的页面永远和仓库里的修复版本一致，不依赖线上 Pages 是否已更新。
-val syncWebAssets by tasks.registering(Sync::class) {
-    from(rootProject.projectDir.parentFile.resolve("web"))
-    into(layout.projectDirectory.dir("src/main/assets/web"))
-}
-
-tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(syncWebAssets) }
 
 android {
     namespace = "com.wlgh.hgtv"
@@ -21,18 +11,12 @@ android {
     defaultConfig {
         minSdk = 21
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
-
-        // 默认加载 APK 内置的网页（构建时自动同步 web/）；
-        // 需要调试线上版本时用 -Phgtv.siteUrl=https://... 覆盖。
-        val site = (project.findProperty("hgtv.siteUrl") as String?)
-            ?: "https://appassets.androidplatform.net/assets/web/index.html"
-        buildConfigField("String", "SITE_URL", "\"$site\"")
+        versionCode = 2
+        versionName = "2.0.0"
     }
 
     buildFeatures {
-        buildConfig = true
+        compose = true
     }
 
     flavorDimensions += "device"
@@ -67,10 +51,26 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
 }
 
 dependencies {
-    // WebViewAssetLoader：用 https://appassets.androidplatform.net 提供内置页面，
-    // 这样是安全上下文（WebCrypto/剪贴板等可用），也避免 file:// 的 CORS 限制。
-    implementation("androidx.webkit:webkit:1.11.0")
+    val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
+    implementation(composeBom)
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.activity:activity-compose:1.9.3")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("androidx.media3:media3-exoplayer:1.5.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.5.1")
+    implementation("androidx.media3:media3-ui:1.5.1")
 }

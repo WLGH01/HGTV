@@ -40,12 +40,6 @@ jobs:
           cp android/app/build/outputs/apk/tv/debug/app-tv-debug.apk out/HGTV-tv-debug.apk
           ls -lh out
 
-      - name: Verify bundled web assets
-        run: |
-          unzip -l out/HGTV-phone-debug.apk | grep -q 'assets/web/index.html'
-          unzip -l out/HGTV-phone-debug.apk | grep -q 'assets/web/app.js'
-          unzip -l out/HGTV-tv-debug.apk | grep -q 'assets/tv-nav.js'
-
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -62,8 +56,9 @@ jobs:
           body: |
             自动构建（commit `${{ github.sha }}`）
 
-            - 手机：`HGTV-phone-debug.apk`
-            - Android TV：`HGTV-tv-debug.apk`
+            - 手机原生版：`HGTV-phone-debug.apk`
+            - Android TV 原生版：`HGTV-tv-debug.apk`
+            - 播放器支持 0.5x–2.0x 倍速
           files: out/*.apk
           make_latest: true
           overwrite_files: true
