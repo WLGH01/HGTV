@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,6 +24,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -1186,6 +1190,7 @@ private fun PhonePlayer(video: Video, initialEp: Int, onBack: () -> Unit) {
                             listOf(Color.Black.copy(alpha = 0.75f), Color.Transparent)
                         )
                     )
+                    .windowInsetsPadding(WindowInsets.statusBars)
                     .padding(horizontal = 6.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1198,39 +1203,11 @@ private fun PhonePlayer(video: Video, initialEp: Int, onBack: () -> Unit) {
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
-                Box {
-                    Text(
-                        "倍速 ${speedLabel(speed)} ▾",
-                        color = Amber,
-                        fontSize = 13.sp,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(Color.Black.copy(alpha = 0.45f))
-                            .clickable {
-                                poke()
-                                showSpeed = true
-                            }
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                    )
-                    DropdownMenu(expanded = showSpeed, onDismissRequest = { showSpeed = false }) {
-                        SPEEDS.forEach { value ->
-                            DropdownMenuItem(
-                                text = { Text(speedLabel(value)) },
-                                onClick = {
-                                    speed = value
-                                    showSpeed = false
-                                    poke()
-                                }
-                            )
-                        }
-                    }
-                }
                 Text(
                     if (landscape) "竖屏" else "横屏",
                     color = Color.White,
                     fontSize = 13.sp,
                     modifier = Modifier
-                        .padding(start = 8.dp)
                         .clip(RoundedCornerShape(20.dp))
                         .background(Color.Black.copy(alpha = 0.45f))
                         .clickable {
@@ -1250,6 +1227,7 @@ private fun PhonePlayer(video: Video, initialEp: Int, onBack: () -> Unit) {
                             listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))
                         )
                     )
+                    .windowInsetsPadding(WindowInsets.navigationBars)
                     .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1306,6 +1284,51 @@ private fun PhonePlayer(video: Video, initialEp: Int, onBack: () -> Unit) {
                     ) {
                         Text("下一集", color = Color.White)
                     }
+                }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Start
+                ) {
+                    Box {
+                        Text(
+                            "倍速 ${speedLabel(speed)} ▾",
+                            color = Amber,
+                            fontSize = 13.sp,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(Color(0xFF222222))
+                                .clickable {
+                                    poke()
+                                    showSpeed = true
+                                }
+                                .padding(horizontal = 12.dp, vertical = 7.dp)
+                        )
+                        DropdownMenu(expanded = showSpeed, onDismissRequest = { showSpeed = false }) {
+                            SPEEDS.forEach { value ->
+                                DropdownMenuItem(
+                                    text = { Text(speedLabel(value)) },
+                                    onClick = {
+                                        speed = value
+                                        showSpeed = false
+                                        poke()
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        "长按屏幕可 2 倍速",
+                        color = Color.White.copy(alpha = 0.45f),
+                        fontSize = 11.sp
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        "共 ${video.episodes.size} 集",
+                        color = Color.White.copy(alpha = 0.55f),
+                        fontSize = 11.sp
+                    )
                 }
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(video.episodes) { episode ->
