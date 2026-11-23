@@ -11,7 +11,7 @@ object Store {
     private const val PREFS = "hgtv_store"
     private const val KEY_FAVORITES = "favorites"
     private const val KEY_HISTORY = "history"
-    private const val KEY_UI_SCALE = "ui_scale"
+    private const val KEY_UI_SCALE = "ui_scale_v2"
 
     data class Favorite(
         val id: String,
@@ -125,6 +125,6 @@ object Store {
     fun uiScale(context: Context): Float = prefs(context).getFloat(KEY_UI_SCALE, 1f)
 
     fun setUiScale(context: Context, scale: Float) {
-        prefs(context).edit().putFloat(KEY_UI_SCALE, scale.coerceIn(0.75f, 1.4f)).apply()
+        prefs(context).edit().putFloat(KEY_UI_SCALE, scale.coerceIn(0.6f, 1.2f)).apply()
     }
 }

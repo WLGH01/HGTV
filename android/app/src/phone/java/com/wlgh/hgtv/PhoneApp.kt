@@ -1,5 +1,9 @@
 package com.wlgh.hgtv
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -69,6 +73,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import com.wlgh.hgtv.data.Api
@@ -1020,6 +1026,7 @@ private fun PhoneDetail(
 private fun PhonePlayer(video: Video, initialEp: Int, onBack: () -> Unit) {
     val context = LocalContext.current
     val player = rememberExoPlayer()
+    val activity = remember(context) { context.findActivity() }
     var ep by remember { mutableIntStateOf(initialEp) }
     var speed by remember { mutableFloatStateOf(1f) }
     var tempSpeed by remember { mutableStateOf<Float?>(null) }
@@ -1028,6 +1035,7 @@ private fun PhonePlayer(video: Video, initialEp: Int, onBack: () -> Unit) {
     var isPlaying by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(false) }
     var showSpeed by remember { mutableStateOf(false) }
+    var landscape by remember { mutableStateOf(false) }
     var controlsVisible by remember { mutableStateOf(true) }
     var interaction by remember { mutableIntStateOf(0) }
     var position by remember { mutableLongStateOf(0L) }
@@ -1036,6 +1044,24 @@ private fun PhonePlayer(video: Video, initialEp: Int, onBack: () -> Unit) {
     var dragging by remember { mutableStateOf(false) }
     var dragCurrent by remember { mutableStateOf(0L) }
     BackHandler(onBack = onBack)
+
+    fun applyOrientation(land: Boolean) {
+        landscape = land
+        val a = activity ?: return
+        a.requestedOrientation = if (land) {
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
+        if (land) hideSystemBars(a) else showSystemBars(a)
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            activity?.let { showSystemBars(it) }
+        }
+    }
 
     val poke: () -> Unit = {
         controlsVisible = true
@@ -1174,7 +1200,7 @@ private fun PhonePlayer(video: Video, initialEp: Int, onBack: () -> Unit) {
                 )
                 Box {
                     Text(
-                        "${speedLabel(speed)} ▾",
+                        "倍速 ${speedLabel(speed)} ▾",
                         color = Amber,
                         fontSize = 13.sp,
                         modifier = Modifier
@@ -1199,6 +1225,20 @@ private fun PhonePlayer(video: Video, initialEp: Int, onBack: () -> Unit) {
                         }
                     }
                 }
+                Text(
+                    if (landscape) "竖屏" else "横屏",
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    modifier = Modifier
+                        .padding(start = 8.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color.Black.copy(alpha = 0.45f))
+                        .clickable {
+                            applyOrientation(!landscape)
+                            poke()
+                        }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                )
             }
 
             Column(
@@ -1363,4 +1403,24 @@ private fun PhonePost(id: String, onBack: () -> Unit) {
             }
         }
     }
+}
+
+private fun Context.findActivity(): Activity? {
+    var ctx: Context? = this
+    while (ctx != null) {
+        if (ctx is Activity) return ctx
+        ctx = (ctx as? ContextWrapper)?.baseContext
+    }
+    return null
+}
+
+private fun hideSystemBars(activity: Activity) {
+    val controller = WindowInsetsControllerCompat(activity.window, activity.window.decorView)
+    controller.hide(WindowInsetsCompat.Type.systemBars())
+    controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+}
+
+private fun showSystemBars(activity: Activity) {
+    WindowInsetsControllerCompat(activity.window, activity.window.decorView)
+        .show(WindowInsetsCompat.Type.systemBars())
 }

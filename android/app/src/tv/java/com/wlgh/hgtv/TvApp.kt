@@ -10,10 +10,12 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,6 +25,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed as rowItemsIndexed
 import androidx.compose.foundation.relocation.BringIntoViewRequester
@@ -111,6 +116,9 @@ private sealed interface TvRoute {
 
 private data class TvNavItem(val label: String, val icon: ImageVector)
 
+/** 大屏基础缩放：TV 版原始设计偏大，统一缩到约 78%，用户比例设置在此基础上再乘。 */
+private const val TV_BASE_SCALE = 0.78f
+
 private val TV_NAV = listOf(
     TvNavItem("首页", Icons.Filled.Home),
     TvNavItem("短剧", Icons.Filled.PlayArrow),
@@ -128,7 +136,7 @@ fun AppRoot() {
     var scale by remember { mutableStateOf(Store.uiScale(context)) }
     val base = LocalDensity.current
     CompositionLocalProvider(
-        LocalDensity provides Density(base.density * scale, base.fontScale)
+        LocalDensity provides Density(base.density * TV_BASE_SCALE * scale, base.fontScale)
     ) {
         TvRoot(
             scale = scale,
@@ -206,6 +214,8 @@ private fun TvHome(
 ) {
     var nav by remember { mutableIntStateOf(0) }
     var rankType by remember { mutableStateOf("hot") }
+    var homeTrend by remember { mutableIntStateOf(0) }
+    var catTrend by remember { mutableIntStateOf(0) }
     var featured by remember { mutableStateOf<List<Video>>(emptyList()) }
     var latest by remember { mutableStateOf<List<Video>>(emptyList()) }
     var hot by remember { mutableStateOf<List<Video>>(emptyList()) }
@@ -233,15 +243,15 @@ private fun TvHome(
                     tags = Api.tagCategories().flatMap { it.tags }.take(24)
                 }
                 1 -> {
-                    latest = Api.category("ai-duanju", 1, 30, "latest").items
-                    hot = Api.category("ai-duanju", 1, 30, "hot").items
+                    latest = Api.category("ai-duanju", 1, 40, "latest").items
+                    hot = Api.category("ai-duanju", 1, 40, "hot").items
                 }
                 2 -> {
-                    latest = Api.category("ai-manju", 1, 30, "latest").items
-                    hot = Api.category("ai-manju", 1, 30, "hot").items
+                    latest = Api.category("ai-manju", 1, 40, "latest").items
+                    hot = Api.category("ai-manju", 1, 40, "hot").items
                 }
-                3 -> original = Api.original(1, 40).items
-                4 -> ranks = Api.ranks(rankType, 1, 30).items
+                3 -> original = Api.original(1, 60).items
+                4 -> ranks = Api.ranks(rankType, 1, 60).items
                 5 -> topics = Api.topics()
                 6 -> {
                     history = Store.history(context)
@@ -254,71 +264,208 @@ private fun TvHome(
 
     Row(Modifier.fillMaxSize().background(Bg)) {
         TvRail(TV_NAV, nav) { nav = it }
-        Column(Modifier.weight(1f).fillMaxHeight().padding(horizontal = 28.dp, vertical = 18.dp)) {
+        Column(
+            Modifier.weight(1f).fillMaxHeight().padding(horizontal = 20.dp, vertical = 12.dp)
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     TV_NAV[nav].label,
-                    fontSize = 32.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.Black,
                     color = Color.White
                 )
-                Spacer(Modifier.width(14.dp))
-                Text("黄果原生 TV", color = Muted, fontSize = 13.sp)
+                Spacer(Modifier.width(12.dp))
+                Text("黄果原生 TV", color = Muted, fontSize = 12.sp)
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when {
                     loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = Amber)
                     }
-                    error != null -> Text("加载失败：$error", color = Danger, fontSize = 16.sp)
-                    nav == 6 -> TvMine(history, favorites, onVideo)
-                    nav == 7 -> TvSettings(scale, onScaleChange)
+                    error != null -> Text("加载失败：$error", color = Danger, fontSize = 15.sp)
+                    nav == 0 -> TvHomeFeed(
+                        featured, latest, hot, original, tags, topics, homeTrend,
+                        { homeTrend = it }, onVideo, onTopic, onTag
+                    )
+                    nav == 1 || nav == 2 -> TvCategoryPage(latest, hot, catTrend, { catTrend = it }, onVideo)
+                    nav == 3 -> TvVideoGrid(original, onVideo)
+                    nav == 4 -> TvRankPage(rankType, ranks, { rankType = it }, onVideo)
                     nav == 5 -> TvTopics(topics, onTopic)
-                    nav == 4 -> {
-                        Column {
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                listOf("热播" to "hot", "推荐" to "recommend", "潜力" to "potential")
-                                    .forEach { (label, value) ->
-                                        TvSmallButton(label, selected = rankType == value) { rankType = value }
-                                    }
-                            }
-                            Spacer(Modifier.height(14.dp))
-                            TvSection("榜单", ranks, onVideo)
-                        }
-                    }
-                    else -> {
-                        val hero = when (nav) {
-                            0 -> featured.firstOrNull() ?: latest.firstOrNull()
-                            1, 2 -> latest.firstOrNull()
-                            3 -> original.firstOrNull()
-                            else -> null
-                        }
-                        Column {
-                            if (hero != null) {
-                                TvHero(hero, onVideo)
-                                Spacer(Modifier.height(18.dp))
-                            }
-                            LazyColumn(
-                                modifier = Modifier.fillMaxWidth().weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                if (nav == 0) {
-                                    item { TvSection("精选推荐", featured, onVideo) }
-                                    item { TvSection("最近上新", latest, onVideo) }
-                                    item { TvSection("黄果原创", original, onVideo) }
-                                    item { TvSection("热播短剧", hot, onVideo) }
-                                    if (tags.isNotEmpty()) item { TvTagRow(tags, onTag) }
-                                    if (topics.isNotEmpty()) item { TvTopicRow(topics, onTopic) }
-                                } else {
-                                    item { TvSection("最近上新", latest, onVideo) }
-                                    item { TvSection("热播短剧", hot, onVideo) }
-                                }
-                            }
-                        }
+                    nav == 6 -> TvMine(history, favorites, onVideo)
+                    else -> TvSettings(scale, onScaleChange)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TvHomeFeed(
+    featured: List<Video>,
+    latest: List<Video>,
+    hot: List<Video>,
+    original: List<Video>,
+    tags: List<Tag>,
+    topics: List<Topic>,
+    trend: Int,
+    onTrend: (Int) -> Unit,
+    onVideo: (Video) -> Unit,
+    onTopic: (String, String) -> Unit,
+    onTag: (String, String) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        contentPadding = PaddingValues(bottom = 14.dp)
+    ) {
+        item { TvSection("精选推荐", featured, onVideo) }
+        item {
+            Column {
+                TvTabRow(listOf("最近上新", "热播短剧"), trend, onTrend)
+                Spacer(Modifier.height(8.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    rowItemsIndexed(if (trend == 0) latest else hot) { _, video ->
+                        TvVideoCard(video, onVideo)
                     }
                 }
             }
+        }
+        item { TvSection("黄果原创", original, onVideo) }
+        if (tags.isNotEmpty()) item { TvTagRow(tags, onTag) }
+        if (topics.isNotEmpty()) item { TvTopicRow(topics, onTopic) }
+    }
+}
+
+@Composable
+private fun TvTabRow(labels: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        labels.forEachIndexed { index, label ->
+            TvSmallButton(label, selected = index == selected) { onSelect(index) }
+        }
+    }
+}
+
+@Composable
+private fun TvCategoryPage(
+    latest: List<Video>,
+    hot: List<Video>,
+    trend: Int,
+    onTrend: (Int) -> Unit,
+    onVideo: (Video) -> Unit
+) {
+    Column(Modifier.fillMaxSize()) {
+        TvTabRow(listOf("最近上新", "热播"), trend, onTrend)
+        Spacer(Modifier.height(12.dp))
+        TvVideoGrid(if (trend == 0) latest else hot, onVideo, Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun TvRankPage(
+    rankType: String,
+    ranks: List<Video>,
+    onType: (String) -> Unit,
+    onVideo: (Video) -> Unit
+) {
+    Column(Modifier.fillMaxSize()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            listOf("热播" to "hot", "推荐" to "recommend", "潜力" to "potential")
+                .forEach { (label, value) ->
+                    TvSmallButton(label, selected = rankType == value) { onType(value) }
+                }
+        }
+        Spacer(Modifier.height(12.dp))
+        TvVideoGrid(ranks, onVideo, Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun TvVideoGrid(
+    videos: List<Video>,
+    onVideo: (Video) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (videos.isEmpty()) {
+        Text("暂无内容", color = Muted, fontSize = 14.sp)
+        return
+    }
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        val columns = (maxWidth.value / 200f).toInt().coerceIn(3, 6)
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(columns),
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(bottom = 16.dp)
+        ) {
+            gridItems(videos) { video -> TvGridCard(video, onVideo) }
+        }
+    }
+}
+
+@Composable
+private fun TvGridCard(video: Video, onVideo: (Video) -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(if (focused) 1.05f else 1f, label = "grid-card-scale")
+    val bringIntoView = remember { BringIntoViewRequester() }
+    LaunchedEffect(focused) {
+        if (focused) runCatching { bringIntoView.bringIntoView() }
+    }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .bringIntoViewRequester(bringIntoView)
+            .onFocusChanged { focused = it.isFocused }
+            .focusable()
+            .tvKey { onVideo(video) }
+            .background(Color(0xFF151515), RoundedCornerShape(12.dp))
+            .border(
+                if (focused) 3.dp else 1.dp,
+                if (focused) Amber else Color(0xFF2A2A2A),
+                RoundedCornerShape(12.dp)
+            )
+            .padding(6.dp)
+    ) {
+        Box(Modifier.fillMaxWidth().aspectRatio(0.7f).clip(RoundedCornerShape(9.dp))) {
+            CoverImage(video.cover, Modifier.fillMaxSize())
+            if (video.score > 0) {
+                Text(
+                    "%.1f".format(video.score),
+                    color = Amber,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(5.dp))
+                        .padding(horizontal = 5.dp, vertical = 1.dp)
+                )
+            }
+            if (video.episodeCount > 0) {
+                Text(
+                    "${video.episodeCount} 集",
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(6.dp)
+                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(5.dp))
+                        .padding(horizontal = 5.dp, vertical = 1.dp)
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            video.title,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        if (video.remarks.isNotBlank()) {
+            Text(video.remarks, color = Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -328,16 +475,16 @@ private fun TvRail(items: List<TvNavItem>, selected: Int, onSelect: (Int) -> Uni
     val first = remember { FocusRequester() }
     Column(
         Modifier
-            .width(206.dp)
+            .width(168.dp)
             .fillMaxHeight()
             .background(Brush.verticalGradient(listOf(Color(0xFF151515), Color(0xFF0A0A0A))))
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 22.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = 12.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Text("黄果", color = Amber, fontSize = 32.sp, fontWeight = FontWeight.Black)
-        Text("解析 · TV", color = Muted, fontSize = 12.sp)
-        Spacer(Modifier.height(18.dp))
+        Text("黄果", color = Amber, fontSize = 26.sp, fontWeight = FontWeight.Black)
+        Text("解析 · TV", color = Muted, fontSize = 11.sp)
+        Spacer(Modifier.height(14.dp))
         items.forEachIndexed { index, item ->
             TvRailItem(item, index == selected, if (index == 0) first else null) { onSelect(index) }
         }
@@ -375,79 +522,22 @@ private fun TvRailItem(
                 RoundedCornerShape(10.dp)
             )
             .border(if (focused) 2.dp else 0.dp, Amber, RoundedCornerShape(10.dp))
-            .padding(horizontal = 12.dp, vertical = 12.dp),
+            .padding(horizontal = 10.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
             item.icon,
             contentDescription = null,
             tint = if (selected) Amber else Color.White,
-            modifier = Modifier.size(22.dp)
+            modifier = Modifier.size(20.dp)
         )
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(8.dp))
         Text(
             item.label,
             color = if (selected) Amber else Color.White,
-            fontSize = 18.sp,
+            fontSize = 15.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
         )
-    }
-}
-
-@Composable
-private fun TvHero(video: Video, onVideo: (Video) -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    var playFocused by remember { mutableStateOf(false) }
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(300.dp)
-            .clip(RoundedCornerShape(18.dp))
-    ) {
-        CoverImage(video.cover, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.horizontalGradient(
-                    listOf(Color.Black.copy(alpha = 0.92f), Color.Black.copy(alpha = 0.45f), Color.Transparent)
-                )
-            )
-        )
-        Column(
-            Modifier.align(Alignment.CenterStart).padding(28.dp).width(640.dp)
-        ) {
-            Text(
-                video.title,
-                fontSize = 38.sp,
-                fontWeight = FontWeight.Black,
-                color = Color.White,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                listOf(
-                    video.remarks,
-                    if (video.year.isNotBlank()) "${video.year}" else "",
-                    if (video.author.isNotBlank()) "作者 ${video.author}" else "",
-                    "热度 ${formatCount(video.hot)}"
-                ).filter { it.isNotBlank() }.joinToString(" · "),
-                color = Color(0xFFDDDDDD),
-                fontSize = 14.sp
-            )
-            if (video.tags.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                Text(video.tags.joinToString("  ") { "#$it" }, color = Amber, fontSize = 14.sp)
-            }
-            Spacer(Modifier.height(18.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TvAction(
-                    "立即播放",
-                    primary = true,
-                    onFocus = { playFocused = it }
-                ) { onVideo(video) }
-                TvAction("查看详情") { onVideo(video) }
-            }
-        }
     }
 }
 
@@ -455,9 +545,9 @@ private fun TvHero(video: Video, onVideo: (Video) -> Unit) {
 private fun TvSection(title: String, videos: List<Video>, onVideo: (Video) -> Unit) {
     if (videos.isEmpty()) return
     Column {
-        Text(title, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text(title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
         Spacer(Modifier.height(8.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             rowItemsIndexed(videos) { _, video ->
                 TvVideoCard(video, onVideo)
             }
@@ -475,60 +565,60 @@ private fun TvVideoCard(video: Video, onVideo: (Video) -> Unit) {
     }
     Column(
         Modifier
-            .width(196.dp)
+            .width(158.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .bringIntoViewRequester(bringIntoView)
             .onFocusChanged { focused = it.isFocused }
             .focusable()
             .tvKey { onVideo(video) }
-            .background(Color(0xFF151515), RoundedCornerShape(14.dp))
-            .border(if (focused) 3.dp else 1.dp, if (focused) Amber else Color(0xFF2A2A2A), RoundedCornerShape(14.dp))
-            .padding(7.dp)
+            .background(Color(0xFF151515), RoundedCornerShape(12.dp))
+            .border(if (focused) 3.dp else 1.dp, if (focused) Amber else Color(0xFF2A2A2A), RoundedCornerShape(12.dp))
+            .padding(6.dp)
     ) {
-        Box(Modifier.fillMaxWidth().height(250.dp).clip(RoundedCornerShape(10.dp))) {
+        Box(Modifier.fillMaxWidth().height(206.dp).clip(RoundedCornerShape(9.dp))) {
             CoverImage(video.cover, Modifier.fillMaxSize())
             if (video.score > 0) {
                 Text(
                     "%.1f".format(video.score),
                     color = Amber,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(7.dp)
+                        .padding(6.dp)
                         .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(5.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                        .padding(horizontal = 5.dp, vertical = 1.dp)
                 )
             }
             if (video.episodeCount > 0) {
                 Text(
                     "${video.episodeCount} 集",
                     color = Color.White,
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(7.dp)
+                        .padding(6.dp)
                         .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(5.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                        .padding(horizontal = 5.dp, vertical = 1.dp)
                 )
             }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
         Text(
             video.title,
-            fontSize = 16.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
-        Text(video.remarks, color = Muted, fontSize = 12.sp, maxLines = 1)
+        Text(video.remarks, color = Muted, fontSize = 11.sp, maxLines = 1)
     }
 }
 
 @Composable
 private fun TvTagRow(tags: List<Tag>, onTag: (String, String) -> Unit) {
     Column {
-        Text("热门标签", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text("热门标签", fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             rowItemsIndexed(tags) { _, tag ->
@@ -541,26 +631,26 @@ private fun TvTagRow(tags: List<Tag>, onTag: (String, String) -> Unit) {
 @Composable
 private fun TvTopicRow(topics: List<Topic>, onTopic: (String, String) -> Unit) {
     Column {
-        Text("专题推荐", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text("专题推荐", fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             rowItemsIndexed(topics) { _, topic ->
                 var focused by remember { mutableStateOf(false) }
                 Column(
                     Modifier
-                        .width(260.dp)
+                        .width(206.dp)
                         .onFocusChanged { focused = it.isFocused }
                         .focusable()
                         .tvKey { onTopic(topic.slug, topic.title) }
                         .border(if (focused) 3.dp else 1.dp, if (focused) Amber else Color(0xFF2A2A2A), RoundedCornerShape(12.dp))
-                        .padding(8.dp)
+                        .padding(7.dp)
                 ) {
                     CoverImage(
                         topic.cover,
-                        Modifier.fillMaxWidth().height(140.dp).clip(RoundedCornerShape(8.dp))
+                        Modifier.fillMaxWidth().height(112.dp).clip(RoundedCornerShape(8.dp))
                     )
-                    Text(topic.title, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("${topic.count} 部", color = Muted, fontSize = 12.sp)
+                    Text(topic.title, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("${topic.count} 部", color = Muted, fontSize = 11.sp)
                 }
             }
         }
@@ -693,13 +783,13 @@ private fun TvMine(
 
 @Composable
 private fun TvSettings(scale: Float, onScaleChange: (Float) -> Unit) {
-    val options = listOf(0.8f, 0.9f, 1f, 1.1f, 1.2f, 1.3f, 1.4f)
+    val options = listOf(0.6f, 0.7f, 0.8f, 0.9f, 1f, 1.1f, 1.2f)
     Column(Modifier.fillMaxSize()) {
-        Text("界面比例", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text("界面比例", fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        Text("调整整个 TV 界面的字号和控件大小，设置会保存在本机。", color = Muted, fontSize = 14.sp)
-        Spacer(Modifier.height(18.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("调整整个 TV 界面的字号和控件大小，设置会保存在本机。", color = Muted, fontSize = 13.sp)
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             options.forEach { option ->
                 TvSmallButton(
                     "${(option * 100).toInt()}%",
@@ -707,8 +797,8 @@ private fun TvSettings(scale: Float, onScaleChange: (Float) -> Unit) {
                 ) { onScaleChange(option) }
             }
         }
-        Spacer(Modifier.height(20.dp))
-        Text("当前：${(scale * 100).toInt()}%", color = Amber, fontSize = 16.sp)
+        Spacer(Modifier.height(18.dp))
+        Text("当前：${(scale * 100).toInt()}%", color = Amber, fontSize = 15.sp)
     }
 }
 
@@ -845,30 +935,49 @@ private fun TvPlayer(video: Video, initialEp: Int, onBack: () -> Unit) {
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
-    var controlsVisible by remember { mutableStateOf(true) }
-    var interaction by remember { mutableIntStateOf(0) }
+    var menuVisible by remember { mutableStateOf(false) }
+    var showSpeed by remember { mutableStateOf(false) }
+    var showEpisodes by remember { mutableStateOf(false) }
+    var hintVisible by remember { mutableStateOf(true) }
     var seekOsd by remember { mutableStateOf(false) }
     var seekOsdAt by remember { mutableLongStateOf(0L) }
     var seekPosition by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
-    val playFocus = remember { FocusRequester() }
+    val resumeFocus = remember { FocusRequester() }
+    val speedFocus = remember { FocusRequester() }
     val rootFocus = remember { FocusRequester() }
     val context = LocalContext.current
-    BackHandler(onBack = onBack)
-
-    val poke: () -> Unit = { controlsVisible = true; interaction += 1 }
 
     fun seekBy(deltaMs: Long) {
         val target = (player.currentPosition + deltaMs).coerceIn(0L, duration.coerceAtLeast(0L))
         player.seekTo(target)
         seekPosition = target
-        seekOsd = true
-        seekOsdAt += 1
+        if (!menuVisible) {
+            seekOsd = true
+            seekOsdAt += 1
+        }
+    }
+
+    fun openMenu() {
+        menuVisible = true
+        player.pause()
+    }
+
+    fun closeMenu(resume: Boolean) {
+        menuVisible = false
+        showSpeed = false
+        showEpisodes = false
+        if (resume) player.play()
+    }
+
+    BackHandler {
+        if (menuVisible) closeMenu(true) else onBack()
     }
 
     LaunchedEffect(ep) {
         loading = true
         error = null
+        menuVisible = false
         player.pause()
         runCatching { Playback.resolve(video.id, ep) }
             .onSuccess { info ->
@@ -880,7 +989,7 @@ private fun TvPlayer(video: Video, initialEp: Int, onBack: () -> Unit) {
             }
             .onFailure { error = it.message ?: "解析失败" }
         loading = false
-        poke()
+        runCatching { rootFocus.requestFocus() }
     }
     LaunchedEffect(speed) { player.setPlaybackSpeed(speed) }
     DisposableEffect(player) {
@@ -899,27 +1008,30 @@ private fun TvPlayer(video: Video, initialEp: Int, onBack: () -> Unit) {
             delay(500)
         }
     }
-    LaunchedEffect(controlsVisible, interaction, isPlaying) {
-        if (controlsVisible && isPlaying) {
-            delay(3800)
-            controlsVisible = false
+    LaunchedEffect(menuVisible) {
+        delay(80)
+        if (menuVisible) {
+            runCatching { resumeFocus.requestFocus() }
+        } else {
+            runCatching { rootFocus.requestFocus() }
         }
     }
-    LaunchedEffect(isPlaying) {
-        if (!isPlaying) controlsVisible = true
+    LaunchedEffect(showSpeed) {
+        if (showSpeed) {
+            delay(60)
+            runCatching { speedFocus.requestFocus() }
+        }
+    }
+    LaunchedEffect(hintVisible) {
+        if (hintVisible) {
+            delay(4500)
+            hintVisible = false
+        }
     }
     LaunchedEffect(seekOsdAt) {
         if (seekOsd) {
             delay(1400)
             seekOsd = false
-        }
-    }
-    LaunchedEffect(controlsVisible) {
-        delay(80)
-        if (controlsVisible) {
-            runCatching { playFocus.requestFocus() }
-        } else {
-            runCatching { rootFocus.requestFocus() }
         }
     }
 
@@ -931,27 +1043,16 @@ private fun TvPlayer(video: Video, initialEp: Int, onBack: () -> Unit) {
             .background(Color.Black)
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val center = event.key == Key.DirectionCenter || event.key == Key.Enter ||
+                    event.key == Key.NumPadEnter || event.key == Key.Spacebar
                 when {
-                    !controlsVisible && (event.key == Key.DirectionLeft || event.key == Key.DirectionRight) -> {
+                    !menuVisible && (event.key == Key.DirectionLeft || event.key == Key.DirectionRight) -> {
                         seekBy(if (event.key == Key.DirectionLeft) -10_000 else 10_000)
                         true
                     }
-                    !controlsVisible && (
-                        event.key == Key.DirectionCenter || event.key == Key.Enter ||
-                            event.key == Key.NumPadEnter || event.key == Key.DirectionUp ||
-                            event.key == Key.DirectionDown
-                        ) -> {
-                        controlsVisible = true
-                        interaction += 1
+                    !menuVisible && center -> {
+                        openMenu()
                         true
-                    }
-                    controlsVisible && (
-                        event.key == Key.DirectionLeft || event.key == Key.DirectionRight ||
-                            event.key == Key.DirectionUp || event.key == Key.DirectionDown ||
-                            event.key == Key.DirectionCenter || event.key == Key.Enter
-                        ) -> {
-                        interaction += 1
-                        false
                     }
                     else -> false
                 }
@@ -959,101 +1060,124 @@ private fun TvPlayer(video: Video, initialEp: Int, onBack: () -> Unit) {
     ) {
         VideoSurface(player, showController = false, modifier = Modifier.fillMaxSize())
 
-        if (controlsVisible) {
-            Column(
-                Modifier
-                    .align(Alignment.TopStart)
-                    .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color.Black.copy(alpha = 0.8f), Color.Transparent)
+        if (!menuVisible) {
+            if (seekOsd) {
+                Column(
+                    Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = 6.dp)
+                ) {
+                    Box(
+                        Modifier.fillMaxWidth().height(3.dp).background(Color.White.copy(alpha = 0.14f))
+                    ) {
+                        val fraction = if (duration > 0) (seekPosition.toFloat() / duration) else 0f
+                        Box(
+                            Modifier.fillMaxWidth(fraction.coerceIn(0f, 1f)).height(3.dp)
+                                .background(Amber.copy(alpha = 0.85f))
                         )
-                    )
-                    .padding(horizontal = 24.dp, vertical = 14.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = onBack) { Text("← 返回", color = Color.White, fontSize = 18.sp) }
-                    Spacer(Modifier.width(12.dp))
+                    }
                     Text(
-                        "${video.title} · 第${ep}集",
-                        color = Color.White,
-                        fontSize = 22.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        "${formatTime(seekPosition)} / ${formatTime(duration)}",
+                        color = Color.White.copy(alpha = 0.75f),
+                        fontSize = 12.sp,
+                        modifier = Modifier.align(Alignment.End).padding(top = 4.dp, end = 16.dp)
                     )
                 }
+            }
+            if (hintVisible && !loading) {
                 Text(
-                    listOf(
-                        video.remarks,
-                        if (video.author.isNotBlank()) "作者 ${video.author}" else "",
-                        "热度 ${formatCount(video.hot)}",
-                        "左右键快进/快退 10 秒"
-                    ).filter { it.isNotBlank() }.joinToString(" · "),
-                    color = Color(0xFFCCCCCC),
-                    fontSize = 13.sp
+                    "左右键 快进/快退 · 中键 暂停/设置",
+                    color = Color.White.copy(alpha = 0.65f),
+                    fontSize = 13.sp,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = 20.dp, top = 18.dp)
+                        .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
                 )
             }
+        }
 
+        if (menuVisible) {
             Column(
                 Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .background(
                         Brush.verticalGradient(
-                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.92f))
+                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.94f))
                         )
                     )
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(horizontal = 32.dp, vertical = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(11.dp)
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    TvSmallButton(
-                        text = if (isPlaying) "暂停" else "播放",
-                        focusRequester = playFocus
-                    ) { if (isPlaying) player.pause() else player.play() }
-                    TvSmallButton("上一集", enabled = ep > 1) { ep -= 1 }
-                    TvSmallButton("下一集", enabled = ep < (video.episodes.maxOfOrNull { it.num } ?: ep)) {
-                        ep += 1
-                    }
-                    TvSmallButton("后退 10s") { seekBy(-10_000) }
-                    TvSmallButton("前进 10s") { seekBy(10_000) }
-                }
+                Text(
+                    "${video.title} · 第${ep}集",
+                    color = Color.White,
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("倍速", color = Muted, fontSize = 14.sp)
+                    Text(formatTime(seekPosition), color = Color.White, fontSize = 12.sp)
                     Spacer(Modifier.width(10.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        rowItemsIndexed(SPEEDS) { _, value ->
-                            TvSmallButton(speedLabel(value), selected = speed == value) { speed = value }
+                    Box(
+                        Modifier.weight(1f).height(4.dp)
+                            .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(2.dp))
+                    ) {
+                        val fraction = if (duration > 0) (seekPosition.toFloat() / duration) else 0f
+                        Box(
+                            Modifier.fillMaxWidth(fraction.coerceIn(0f, 1f)).height(4.dp)
+                                .background(Amber, RoundedCornerShape(2.dp))
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Text(formatTime(duration), color = Color.White, fontSize = 12.sp)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                    TvSmallButton(
+                        text = "继续播放",
+                        focusRequester = resumeFocus
+                    ) { closeMenu(true) }
+                    TvSmallButton("快退 30s") { seekBy(-30_000) }
+                    TvSmallButton("快进 30s") { seekBy(30_000) }
+                    TvSmallButton("上一集", enabled = ep > 1) { ep -= 1 }
+                    TvSmallButton(
+                        "下一集",
+                        enabled = ep < (video.episodes.maxOfOrNull { it.num } ?: ep)
+                    ) { ep += 1 }
+                    TvSmallButton("倍速 ${speedLabel(speed)}", selected = showSpeed) {
+                        showSpeed = !showSpeed
+                        showEpisodes = false
+                    }
+                    TvSmallButton("选集", selected = showEpisodes) {
+                        showEpisodes = !showEpisodes
+                        showSpeed = false
+                    }
+                }
+                if (showSpeed) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("倍速", color = Muted, fontSize = 12.sp)
+                        SPEEDS.forEachIndexed { index, value ->
+                            TvSmallButton(
+                                speedLabel(value),
+                                selected = speed == value,
+                                focusRequester = if (index == 0) speedFocus else null
+                            ) { speed = value }
                         }
                     }
                 }
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    rowItemsIndexed(video.episodes) { _, episode ->
-                        TvSmallButton("${episode.num}", selected = episode.num == ep) { ep = episode.num }
+                if (showEpisodes) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        rowItemsIndexed(video.episodes) { _, episode ->
+                            TvSmallButton("${episode.num}", selected = episode.num == ep) {
+                                ep = episode.num
+                            }
+                        }
                     }
                 }
-            }
-        }
-
-        if (seekOsd) {
-            Column(
-                Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = 4.dp)
-            ) {
-                Box(
-                    Modifier.fillMaxWidth().height(2.dp).background(Color.White.copy(alpha = 0.12f))
-                ) {
-                    val fraction = if (duration > 0) (seekPosition.toFloat() / duration) else 0f
-                    Box(
-                        Modifier.fillMaxWidth(fraction.coerceIn(0f, 1f)).height(2.dp)
-                            .background(Color.White.copy(alpha = 0.5f))
-                    )
-                }
-                Text(
-                    "${formatTime(seekPosition)} / ${formatTime(duration)}",
-                    color = Color.White.copy(alpha = 0.55f),
-                    fontSize = 11.sp,
-                    modifier = Modifier.align(Alignment.End).padding(top = 3.dp, end = 12.dp)
-                )
             }
         }
 
@@ -1075,7 +1199,6 @@ private fun TvTopic(
     isTag: Boolean = false
 ) {
     var videos by remember { mutableStateOf<List<Video>>(emptyList()) }
-    var posts by remember { mutableStateOf<List<com.wlgh.hgtv.data.Post>>(emptyList()) }
     var page by remember { mutableIntStateOf(1) }
     var pages by remember { mutableIntStateOf(1) }
     var loading by remember { mutableStateOf(true) }
@@ -1099,20 +1222,21 @@ private fun TvTopic(
         loading = false
     }
 
-    Column(Modifier.fillMaxSize().background(Bg).padding(24.dp)) {
+    Column(Modifier.fillMaxSize().background(Bg).padding(20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("← 返回", color = Color.White) }
-            Text(title, fontSize = 30.sp, fontWeight = FontWeight.Black)
+            Text(title, fontSize = 24.sp, fontWeight = FontWeight.Black)
         }
-        Spacer(Modifier.height(12.dp))
-        if (loading && videos.isEmpty()) {
-            CircularProgressIndicator(color = Amber)
+        Spacer(Modifier.height(10.dp))
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            when {
+                loading && videos.isEmpty() -> CircularProgressIndicator(color = Amber)
+                videos.isEmpty() -> Text("暂无内容", color = Muted, fontSize = 14.sp)
+                else -> TvVideoGrid(videos, onVideo)
+            }
         }
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            rowItemsIndexed(videos) { _, video -> TvVideoCard(video, onVideo) }
-        }
-        Spacer(Modifier.height(12.dp))
         if (page < pages) {
+            Spacer(Modifier.height(8.dp))
             TvSmallButton("加载更多") { page += 1 }
         }
         error?.let { Text(it, color = Danger) }
