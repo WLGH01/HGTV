@@ -4,17 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>播放 · 黄果解析</title>
-<link rel="stylesheet" href="style.css?v=20261123a">
-<link rel="stylesheet" href="play.css?v=20261123a">
+<link rel="stylesheet" href="style.css?v=20261123d">
+<link rel="stylesheet" href="play.css?v=20261123d">
 </head>
 <body class="play-body">
 <header class="topbar">
   <div class="brand"><a class="mark" href="index.html">黄</a><div><a class="home-link" href="index.html"><strong>黄果解析</strong></a><small>播放页</small></div></div>
   <nav class="top-nav">
-    <a href="index.html">全部剧集</a>
+    
+    <a href="home.html">首页</a><a href="index.html">全部剧集</a>
     <a href="ranks.html">排行榜</a>
     <a href="topics.html">专辑专题</a>
+    <a href="original.html">黄果原创</a>
     <a href="chigua.html">黄果吃瓜</a>
+    <a href="blog.html">博客</a>
     <a href="api.html">接口</a>
   </nav>
 </header>
@@ -65,7 +68,7 @@
         <div class="episodes" id="episodes"></div>
       </div>
       <div class="related-block">
-        <div class="ep-head"><span class="section-label">RELATED · 相关推荐</span></div>
+        <div class="ep-head"><span class="section-label">RELATED · 猜你喜欢</span></div>
         <section class="grid" id="related"></section>
       </div>
     </div>
@@ -75,7 +78,7 @@
 <footer>内容来自公开站点，仅作技术演示。请遵守当地法律法规与版权规则。</footer>
 
 <script src="https://huangguo-parser.13681235735.workers.dev/hls.js"></script>
-<script src="app.js?v=20261123a"></script>
+<script src="app.js?v=20261123d"></script>
 <script>
 const $=s=>document.querySelector(s);
 let hlsPlayer=null;
@@ -242,8 +245,17 @@ function step(delta){
 
 async function loadRelated(id){
   try{
-    const d=await api('/category/ai-duanju?page=1&size=6&sort=latest');
-    const list=(d.list||[]).filter(x=>String(x.vod_id)!==String(id)).slice(0,6);
+    let list=[];
+    try{
+      const d=await api('/videos/'+encodeURIComponent(id)+'/related?page=1&size=8');
+      list=d.list||[];
+    }catch(e){}
+    if(!list.length){
+      const d=await api('/category/ai-duanju?page=1&size=8&sort=latest');
+      list=d.list||[];
+    }
+    list=list.filter(x=>String(x.vod_id)!==String(id)).slice(0,6);
+    if(!list.length){ $('#related').innerHTML='<div class="empty">暂无推荐</div>'; return; }
     $('#related').innerHTML=list.map(x=>`<article class="card" data-id="${esc(x.vod_id)}"><div class="cover">${x.vod_pic?imgTag(x.vod_pic,x.vod_name):'<span>黄果</span>'}</div><div class="card-body"><h3>${esc(x.vod_name)}</h3><p>${esc(x.vod_remarks||'')}</p></div></article>`).join('');
     $('#related').querySelectorAll('.card').forEach(c=>c.onclick=()=>{location.href='play.html?id='+encodeURIComponent(c.dataset.id)+'&ep=1'});
   }catch(e){$('#related').innerHTML='<div class="empty">推荐加载失败</div>'}

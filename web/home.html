@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>首页 · 黄果解析</title>
+<link rel="stylesheet" href="style.css?v=20261123d">
+<style>
+.row-scroll{display:flex;gap:14px;overflow-x:auto;padding:4px 2px 12px;scrollbar-width:thin}
+.row-scroll .card{flex:0 0 156px;width:156px}
+.row-scroll .card .cover{aspect-ratio:3/4}
+.home-section{margin-bottom:16px}
+.chips.wrap{flex-wrap:wrap}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><a class="mark" href="home.html">黄</a><div><a class="home-link" href="home.html"><strong>黄果解析</strong></a><small>首页</small></div></div>
+  <nav class="top-nav">
+    <a class="active" href="home.html">首页</a>
+    <a href="index.html">全部剧集</a>
+    <a href="ranks.html">排行榜</a>
+    <a href="topics.html">专辑专题</a>
+    <a href="original.html">黄果原创</a>
+    <a href="chigua.html">黄果吃瓜</a>
+    <a href="blog.html">博客</a>
+    <a href="api.html">接口</a>
+  </nav>
+</header>
+
+<main>
+  <section class="hero compact">
+    <div class="eyebrow">HUANGGUO · HOME</div>
+    <h1>首页</h1>
+    <p>精选推荐、最近上新、黄果原创、热播短剧与热门标签。</p>
+  </section>
+
+  <div id="home-status" class="status">正在加载首页…</div>
+
+  <section class="panel home-section">
+    <div class="panel-head"><div><span class="section-label">FEATURED</span><h2>精选推荐</h2></div><a class="ghost" href="original.html">更多</a></div>
+    <div class="row-scroll" id="row-featured"></div>
+  </section>
+
+  <section class="panel home-section">
+    <div class="panel-head"><div><span class="section-label">NEW</span><h2>最近上新</h2></div><a class="ghost" href="index.html">全部剧集</a></div>
+    <div class="row-scroll" id="row-latest"></div>
+  </section>
+
+  <section class="panel home-section">
+    <div class="panel-head"><div><span class="section-label">ORIGINAL</span><h2>黄果原创</h2></div><a class="ghost" href="original.html">查看全部</a></div>
+    <div class="row-scroll" id="row-original"></div>
+  </section>
+
+  <section class="panel home-section">
+    <div class="panel-head"><div><span class="section-label">HOT</span><h2>热播短剧</h2></div><a class="ghost" href="ranks.html">排行榜</a></div>
+    <div class="row-scroll" id="row-hot"></div>
+  </section>
+
+  <section class="panel home-section">
+    <div class="panel-head"><div><span class="section-label">TAGS</span><h2>热门标签</h2></div></div>
+    <div class="chips wrap" id="home-tags"></div>
+  </section>
+
+  <section class="panel home-section">
+    <div class="panel-head"><div><span class="section-label">TOPICS</span><h2>专题推荐</h2></div><a class="ghost" href="topics.html">查看全部</a></div>
+    <div class="row-scroll" id="row-topics"></div>
+  </section>
+</main>
+
+<footer>内容来自公开站点，仅作技术演示。请遵守当地法律法规与版权规则。</footer>
+
+<script src="app.js?v=20261123d"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+function renderRow(sel, list) {
+  const el = $(sel);
+  if (!el) return;
+  el.innerHTML = (list || []).map(cardHtml).join('') || '<div class="empty">暂无内容</div>';
+  bindCards(el);
+  hydrateCovers(el);
+}
+async function safe(fn, fallback) {
+  try { return await fn(); } catch (e) { return fallback; }
+}
+async function loadHome() {
+  setStatus($('#home-status'), '正在加载首页…');
+  const featured = await safe(async () => parseHtmlCards(await fetchHtml(SITE + '/recommend')).slice(0, 12), []);
+  const latest = await safe(async () => (await api('/category/ai-duanju?page=1&size=12&sort=latest')).list || [], []);
+  const original = await safe(async () => (await api('/videos?page=1&size=12&is_original=1')).list || [], []);
+  const hot = await safe(async () => (await api('/category/ai-duanju?page=1&size=12&sort=hot')).list || [], []);
+  const topics = await safe(async () => (await api('/topics')).list || [], []);
+  const tagData = await safe(async () => (await fetch(SITE + '/api/tags')).json(), null);
+
+  renderRow('#row-featured', featured);
+  renderRow('#row-latest', latest);
+  renderRow('#row-original', original);
+  renderRow('#row-hot', hot);
+
+  const tagEl = $('#home-tags');
+  const tags = tagData && tagData.data && tagData.data.categories
+    ? tagData.data.categories.flatMap((c) => c.tags || []).slice(0, 30)
+    : [];
+  tagEl.innerHTML = tags.map((t) => `<button onclick="location.href='tag.html?slug=${encodeURIComponent(t.slug)}&name=${encodeURIComponent(t.name)}'">${esc(t.name)}</button>`).join('') || '<span class="muted">暂无标签</span>';
+
+  renderRow('#row-topics', (topics || []).map((t) => ({
+    vod_id: 'topic_' + t.slug,
+    vod_name: t.title,
+    vod_pic: mediaUrl(t.cover || ''),
+    vod_remarks: (t.video_count || 0) + ' 部'
+  })));
+
+  const total = featured.length + latest.length + original.length + hot.length;
+  setStatus($('#home-status'), total ? '' : '内容加载失败，请稍后重试。');
+}
+loadHome();
+</script>
+</body>
+</html>

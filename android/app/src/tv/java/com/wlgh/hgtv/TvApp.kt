@@ -266,46 +266,55 @@ private fun TvHome(
                 Text("黄果原生 TV", color = Muted, fontSize = 13.sp)
             }
             Spacer(Modifier.height(12.dp))
-            when {
-                loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Amber)
-                }
-                error != null -> Text("加载失败：$error", color = Danger, fontSize = 16.sp)
-                nav == 6 -> TvMine(history, favorites, onVideo)
-                nav == 7 -> TvSettings(scale, onScaleChange)
-                nav == 5 -> TvTopics(topics, onTopic)
-                nav == 4 -> {
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        listOf("热播" to "hot", "推荐" to "recommend", "潜力" to "potential")
-                            .forEach { (label, value) ->
-                                TvSmallButton(label, selected = rankType == value) { rankType = value }
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                when {
+                    loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Amber)
+                    }
+                    error != null -> Text("加载失败：$error", color = Danger, fontSize = 16.sp)
+                    nav == 6 -> TvMine(history, favorites, onVideo)
+                    nav == 7 -> TvSettings(scale, onScaleChange)
+                    nav == 5 -> TvTopics(topics, onTopic)
+                    nav == 4 -> {
+                        Column {
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                listOf("热播" to "hot", "推荐" to "recommend", "潜力" to "potential")
+                                    .forEach { (label, value) ->
+                                        TvSmallButton(label, selected = rankType == value) { rankType = value }
+                                    }
                             }
+                            Spacer(Modifier.height(14.dp))
+                            TvSection("榜单", ranks, onVideo)
+                        }
                     }
-                    Spacer(Modifier.height(14.dp))
-                    TvSection("榜单", ranks, onVideo)
-                }
-                else -> {
-                    val hero = when (nav) {
-                        0 -> featured.firstOrNull() ?: latest.firstOrNull()
-                        1, 2 -> latest.firstOrNull()
-                        3 -> original.firstOrNull()
-                        else -> null
-                    }
-                    if (hero != null) {
-                        TvHero(hero, onVideo)
-                        Spacer(Modifier.height(18.dp))
-                    }
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        if (nav == 0) {
-                            item { TvSection("精选推荐", featured, onVideo) }
-                            item { TvSection("最近上新", latest, onVideo) }
-                            item { TvSection("黄果原创", original, onVideo) }
-                            item { TvSection("热播短剧", hot, onVideo) }
-                            if (tags.isNotEmpty()) item { TvTagRow(tags, onTag) }
-                            if (topics.isNotEmpty()) item { TvTopicRow(topics, onTopic) }
-                        } else {
-                            item { TvSection("最近上新", latest, onVideo) }
-                            item { TvSection("热播短剧", hot, onVideo) }
+                    else -> {
+                        val hero = when (nav) {
+                            0 -> featured.firstOrNull() ?: latest.firstOrNull()
+                            1, 2 -> latest.firstOrNull()
+                            3 -> original.firstOrNull()
+                            else -> null
+                        }
+                        Column {
+                            if (hero != null) {
+                                TvHero(hero, onVideo)
+                                Spacer(Modifier.height(18.dp))
+                            }
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                if (nav == 0) {
+                                    item { TvSection("精选推荐", featured, onVideo) }
+                                    item { TvSection("最近上新", latest, onVideo) }
+                                    item { TvSection("黄果原创", original, onVideo) }
+                                    item { TvSection("热播短剧", hot, onVideo) }
+                                    if (tags.isNotEmpty()) item { TvTagRow(tags, onTag) }
+                                    if (topics.isNotEmpty()) item { TvTopicRow(topics, onTopic) }
+                                } else {
+                                    item { TvSection("最近上新", latest, onVideo) }
+                                    item { TvSection("热播短剧", hot, onVideo) }
+                                }
+                            }
                         }
                     }
                 }
@@ -559,7 +568,10 @@ private fun TvTopics(topics: List<Topic>, onTopic: (String, String) -> Unit) {
         Text("暂无专题", color = Muted)
         return
     }
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
         items(topics.size) { index ->
             val topic = topics[index]
             var focused by remember { mutableStateOf(false) }
@@ -594,7 +606,10 @@ private fun TvMine(
     favorites: List<Store.Favorite>,
     onVideo: (Video) -> Unit
 ) {
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
         item {
             Text("继续观看", fontSize = 22.sp, fontWeight = FontWeight.Bold)
             if (history.isEmpty()) {
@@ -674,7 +689,7 @@ private fun TvMine(
 @Composable
 private fun TvSettings(scale: Float, onScaleChange: (Float) -> Unit) {
     val options = listOf(0.8f, 0.9f, 1f, 1.1f, 1.2f, 1.3f, 1.4f)
-    Column {
+    Column(Modifier.fillMaxSize()) {
         Text("界面比例", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         Text("调整整个 TV 界面的字号和控件大小，设置会保存在本机。", color = Muted, fontSize = 14.sp)

@@ -261,8 +261,8 @@ object Api {
     )
 
     private fun parseHtmlVideoCards(html: String): List<Video> {
-        val starts = Regex("""<div[^>]*class="[^"]*hg-drama-card[^"]*"[^>]*>""")
-            .findAll(html).map { it.range.first }.toList()
+        val starts = Regex("""data-track-item-id="\d+"""").findAll(html)
+            .map { it.range.first }.toList()
         val out = ArrayList<Video>(starts.size)
         for (index in starts.indices) {
             val end = if (index + 1 < starts.size) starts[index + 1]
@@ -311,8 +311,8 @@ object Api {
     }
 
     private fun parseHtmlPosts(html: String): List<Post> {
-        val starts = Regex("""<a[^>]*class="[^"]*hg-cate-feed__card[^"]*"[^>]*>""")
-            .findAll(html).map { it.range.first }.toList()
+        val starts = Regex("""data-track-item-id="\d+"""").findAll(html)
+            .map { it.range.first }.toList()
         val out = ArrayList<Post>(starts.size)
         for (index in starts.indices) {
             val end = if (index + 1 < starts.size) starts[index + 1]

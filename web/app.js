@@ -316,6 +316,71 @@ function fromPost(p) {
   };
 }
 
+async function fetchHtml(url) {
+  const r = await fetch(url, { headers: { 'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8' } });
+  if (!r.ok) throw Error('HTTP ' + r.status);
+  return r.text();
+}
+
+// 服务端渲染页面（/recommend、/tag/xxx、/blog）没有 JSON 接口，按卡片块解析。
+function parseHtmlCards(html) {
+  const out = [];
+  const seen = {};
+  const re = /data-track-item-id="\d+"/g;
+  const starts = [];
+  let m;
+  while ((m = re.exec(html))) starts.push(m.index);
+  for (let i = 0; i < starts.length; i++) {
+    const b = html.slice(starts[i], i + 1 < starts.length ? starts[i + 1] : Math.min(html.length, starts[i] + 9000));
+    const id = (b.match(/data-track-item-id="(\d+)"/) || b.match(/\/video\/(\d+)\//) || [])[1];
+    if (!id || seen[id]) continue;
+    const tm = b.match(/hg-drama-card__title[^>]*>([\s\S]*?)<\/h3>/i);
+    const name = cleanTitle(tm ? tm[1] : ((b.match(/data-track-item-name="([^"]+)"/) || [])[1] || ''));
+    if (!name) continue;
+    const cover = (b.match(/data-src="([^"]+)"/) || b.match(/src="([^"]+)"/) || [])[1] || '';
+    const ep = cleanTitle((b.match(/hg-drama-card__episode[^>]*>([^<]+)</) || [])[1] || '');
+    const score = (b.match(/hg-drama-card__score[^>]*>([\d.]+)/) || [])[1] || '';
+    const tags = [];
+    let t;
+    const tre = /class="hg-tag"[^>]*>([^<]+)</g;
+    while ((t = tre.exec(b))) tags.push(cleanTitle(t[1]));
+    seen[id] = 1;
+    out.push({
+      vod_id: id,
+      vod_name: name,
+      vod_pic: mediaUrl(cover),
+      vod_remarks: [ep, score ? score + '分' : ''].filter(Boolean).join(' · '),
+      vod_score: score,
+      vod_tags: tags,
+      vod_episode_count: Number((ep.match(/(\d+)/) || [])[1] || 0)
+    });
+  }
+  return out;
+}
+
+function parseHtmlPosts(html) {
+  const out = [];
+  const seen = {};
+  const re = /data-track-item-id="\d+"/g;
+  const starts = [];
+  let m;
+  while ((m = re.exec(html))) starts.push(m.index);
+  for (let i = 0; i < starts.length; i++) {
+    const b = html.slice(starts[i], i + 1 < starts.length ? starts[i + 1] : Math.min(html.length, starts[i] + 7000));
+    const id = (b.match(/data-track-item-id="(\d+)"/) || b.match(/\/archives\/(\d+)\//) || [])[1];
+    if (!id || seen[id]) continue;
+    const title = cleanTitle((b.match(/hg-cate-feed__title[^>]*>([\s\S]*?)<\/h3>/i) || [])[1] || '');
+    if (!title) continue;
+    const cover = (b.match(/data-src="([^"]+)"/) || [])[1] || '';
+    const author = cleanTitle((b.match(/hg-cate-feed__author[^>]*>([\s\S]*?)<\/span>/i) || [])[1] || '');
+    const date = cleanTitle((b.match(/hg-cate-feed__date[^>]*>([\s\S]*?)<\/span>/i) || [])[1] || '');
+    const intro = cleanTitle((b.match(/hg-cate-feed__intro[^>]*>([\s\S]*?)<\/p>/i) || [])[1] || '');
+    seen[id] = 1;
+    out.push({ id: id, title: title, cover: mediaUrl(cover), author: author, date: date, intro: intro });
+  }
+  return out;
+}
+
 function rankItem(it) {
   const o = fromItem(it);
   const metric = [it.metric_label, it.metric_value].filter((x) => x !== undefined && x !== null && x !== '').join(' ');

@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>博客 · 黄果解析</title>
+<link rel="stylesheet" href="style.css?v=20261123d">
+<style>
+.blog-list{display:flex;flex-direction:column;gap:18px;padding:10px 0 40px}
+.blog-card{display:flex;gap:16px;cursor:pointer;border-bottom:1px solid var(--line);padding-bottom:18px}
+.blog-card .thumb{flex:0 0 220px;aspect-ratio:16/9;overflow:hidden;background:#dedbd4}
+.blog-card .thumb img{width:100%;height:100%;object-fit:cover}
+.blog-card h3{margin:0 0 8px;font-size:18px;line-height:1.5}
+.blog-card .meta{color:var(--muted);font-size:12px;margin-bottom:8px}
+.blog-card p{margin:0;color:#555;font-size:13px;line-height:1.7}
+.article{max-width:860px;margin:0 auto;padding:10px 0 60px}
+.article h1{font-size:28px;line-height:1.4}
+.article .meta{color:var(--muted);font-size:13px;margin:8px 0 20px}
+.article-content{font-size:16px;line-height:1.9;color:#222}
+.article-content img{max-width:100%;height:auto;display:block;margin:16px auto}
+@media(max-width:700px){.blog-card{flex-direction:column}.blog-card .thumb{flex:auto;width:100%}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><a class="mark" href="home.html">黄</a><div><a class="home-link" href="home.html"><strong>黄果解析</strong></a><small>博客</small></div></div>
+  <nav class="top-nav">
+    <a href="home.html">首页</a>
+    <a href="index.html">全部剧集</a>
+    <a href="ranks.html">排行榜</a>
+    <a href="topics.html">专辑专题</a>
+    <a href="original.html">黄果原创</a>
+    <a href="chigua.html">黄果吃瓜</a>
+    <a class="active" href="blog.html">博客</a>
+    <a href="api.html">接口</a>
+  </nav>
+</header>
+
+<main>
+  <section id="list-wrap">
+    <section class="hero compact">
+      <div class="eyebrow">BLOG</div>
+      <h1>博客</h1>
+      <p>黑料吃瓜、短剧剧评与最新文章。</p>
+    </section>
+    <section class="panel">
+      <div id="status" class="status">加载中…</div>
+      <div id="list" class="blog-list"></div>
+      <div class="load-more" id="load-more"></div>
+    </section>
+  </section>
+
+  <section id="detail-wrap" style="display:none">
+    <section class="panel">
+      <div class="article" id="article"></div>
+    </section>
+  </section>
+</main>
+
+<footer>内容来自公开站点，仅作技术演示。请遵守当地法律法规与版权规则。</footer>
+
+<script src="app.js?v=20261123d"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const params = new URLSearchParams(location.search);
+const POST_ID = params.get('id') || '';
+const STATE = { page: 0, pages: 1, loading: false };
+
+async function loadList(reset) {
+  if (STATE.loading) return;
+  if (!reset && STATE.page >= STATE.pages) return;
+  STATE.loading = true;
+  const next = reset ? 1 : STATE.page + 1;
+  const url = next > 1 ? SITE + '/blog/page/' + next + '/' : SITE + '/blog/';
+  setStatus($('#status'), '加载中…');
+  try {
+    const html = await fetchHtml(url);
+    const list = parseHtmlPosts(html);
+    const nums = [...html.matchAll(/\/blog\/page\/(\d+)\//g)].map((m) => Number(m[1]));
+    STATE.pages = nums.length ? Math.max.apply(null, nums) : 1;
+    STATE.page = next;
+    if (reset) $('#list').innerHTML = '';
+    $('#list').insertAdjacentHTML('beforeend', list.map((p) => `
+      <article class="blog-card" data-id="${esc(p.id)}">
+        <div class="thumb">${p.cover ? imgTag(p.cover, p.title) : ''}</div>
+        <div>
+          <h3>${esc(p.title)}</h3>
+          <div class="meta">${esc(p.author || '')}${p.author && p.date ? ' · ' : ''}${esc(p.date || '')}</div>
+          <p>${esc(p.intro || '')}</p>
+        </div>
+      </article>`).join(''));
+    $('#list').querySelectorAll('.blog-card').forEach((card) => {
+      card.onclick = () => { location.href = 'blog.html?id=' + encodeURIComponent(card.dataset.id); };
+    });
+    hydrateCovers($('#list'));
+    setStatus($('#status'), `共 ${$('#list').querySelectorAll('.blog-card').length} 篇 · 第 ${STATE.page}/${STATE.pages} 页`);
+    $('#load-more').innerHTML = STATE.page >= STATE.pages
+      ? '<div class="done">已加载全部内容</div>'
+      : '<button id="more">加载更多</button>';
+    const more = $('#more');
+    if (more) more.onclick = () => loadList(false);
+  } catch (e) {
+    setStatus($('#status'), '加载失败：' + e.message);
+  } finally {
+    STATE.loading = false;
+  }
+}
+
+function sanitizeArticle(html) {
+  const doc = new DOMParser().parseFromString('<div id="__root">' + (html || '') + '</div>', 'text/html');
+  const root = doc.getElementById('__root');
+  root.querySelectorAll('script,style,iframe,object,embed,link,meta,form,input,button').forEach((n) => n.remove());
+  root.querySelectorAll('*').forEach((n) => {
+    [...n.attributes].forEach((a) => {
+      const name = a.name.toLowerCase();
+      if (name.indexOf('on') === 0) n.removeAttribute(a.name);
+      else if ((name === 'href' || name === 'src') && /^\s*javascript:/i.test(a.value)) n.removeAttribute(a.name);
+    });
+  });
+  root.querySelectorAll('img').forEach((img) => {
+    const src = img.getAttribute('data-src') || img.getAttribute('src');
+    if (src) img.setAttribute('data-src', src);
+    img.removeAttribute('src');
+    img.removeAttribute('srcset');
+  });
+  return root.innerHTML;
+}
+
+async function loadDetail(id) {
+  $('#list-wrap').style.display = 'none';
+  $('#detail-wrap').style.display = '';
+  setStatus($('#status'), '加载中…');
+  try {
+    const d = await api('/post/' + encodeURIComponent(id));
+    const p = (d.list || [])[0];
+    if (!p) throw Error('详情为空');
+    document.title = p.vod_name + ' · 博客 · 黄果解析';
+    $('#article').innerHTML = `
+      <a class="ghost" href="blog.html">← 返回博客</a>
+      <h1>${esc(p.vod_name)}</h1>
+      <div class="meta">${esc(p.vod_author || '')}${p.vod_author && p.vod_created ? ' · ' : ''}${esc(p.vod_created || '')}</div>
+      <div class="article-content">${sanitizeArticle(p.vod_content)}</div>`;
+    hydrateCovers($('#article'));
+  } catch (e) {
+    $('#article').innerHTML = '<div class="error">加载失败：' + esc(e.message) + '</div>';
+  }
+}
+
+if (POST_ID) loadDetail(POST_ID);
+else loadList(true);
+</script>
+</body>
+</html>
