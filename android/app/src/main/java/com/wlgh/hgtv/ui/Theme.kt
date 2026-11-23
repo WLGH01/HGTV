@@ -1,8 +1,11 @@
 package com.wlgh.hgtv.ui
 
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 
 val Amber = Color(0xFFF5C518)
@@ -21,7 +24,14 @@ fun HgTheme(content: @Composable () -> Unit) {
             surface = Panel,
             onBackground = Color(0xFFEDEDED),
             onSurface = Color(0xFFEDEDED)
-        ),
-        content = content
-    )
+        )
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = Bg,
+            contentColor = Color(0xFFEDEDED)
+        ) {
+            content()
+        }
+    }
 }

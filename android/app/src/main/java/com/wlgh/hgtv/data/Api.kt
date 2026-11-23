@@ -24,17 +24,84 @@ object Api {
         .readTimeout(25, TimeUnit.SECONDS)
         .build()
 
-    private suspend fun getJson(path: String): JSONObject = withContext(Dispatchers.IO) {
+    private suspend fun getText(url: String): String = withContext(Dispatchers.IO) {
         val request = Request.Builder()
-            .url(SITE + path)
+            .url(url)
             .header("User-Agent", UA)
-            .header("Accept", "application/json, text/plain, */*")
+            .header("Accept", "text/html,application/json,text/plain,*/*")
             .header("Referer", SITE + "/")
             .build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
-            JSONObject(response.body?.string().orEmpty())
+            response.body?.string().orEmpty()
         }
+    }
+
+    private suspend fun getJson(path: String): JSONObject =
+        JSONObject(getText(SITE + path))
+
+    /** 首页精选推荐：站点 /recommend 页是服务端渲染，直接解析卡片。 */
+    suspend fun featured(limit: Int = 20): List<Video> =
+        parseHtmlVideoCards(getText("$SITE/recommend")).take(limit)
+
+    /** 黄果原创：官方列表接口支持 is_original=1。 */
+    suspend fun original(page: Int, size: Int = 50): VideoPage =
+        parsePage(getJson("/api/videos?page=$page&size=$size&is_original=1"))
+
+    /** 标签筛选：站点只有 /tag/{slug}/ 页面，解析服务端渲染卡片。 */
+    suspend fun tagVideos(slug: String, page: Int, size: Int = 50): VideoPage {
+        val url = if (page <= 1) "$SITE/tag/$slug/" else "$SITE/tag/$slug/page/$page/"
+        val html = getText(url)
+        val items = parseHtmlVideoCards(html).take(size)
+        val pages = Regex("/tag/$slug/page/(\\d+)/").findAll(html)
+            .mapNotNull { it.groupValues.getOrNull(1)?.toIntOrNull() }
+            .maxOrNull() ?: 1
+        return VideoPage(items, page, pages)
+    }
+
+    /** 博客列表：/blog/ 与 /blog/page/N/ 服务端渲染。 */
+    suspend fun blog(page: Int, size: Int = 50): PostPage {
+        val url = if (page <= 1) "$SITE/blog/" else "$SITE/blog/page/$page/"
+        val html = getText(url)
+        val items = parseHtmlPosts(html).take(size)
+        val pages = Regex("/blog/page/(\\d+)/").findAll(html)
+            .mapNotNull { it.groupValues.getOrNull(1)?.toIntOrNull() }
+            .maxOrNull() ?: 1
+        return PostPage(items, page, pages)
+    }
+
+    /** 热门标签分类。 */
+    suspend fun tagCategories(): List<TagCategory> {
+        val data = getJson("/api/tags").optJSONObject("data") ?: return emptyList()
+        val categories = data.optJSONArray("categories") ?: return emptyList()
+        val out = ArrayList<TagCategory>(categories.length())
+        for (i in 0 until categories.length()) {
+            val c = categories.optJSONObject(i) ?: continue
+            val tagsArr = c.optJSONArray("tags") ?: JSONArray()
+            val tags = ArrayList<Tag>(tagsArr.length())
+            for (j in 0 until tagsArr.length()) {
+                val t = tagsArr.optJSONObject(j) ?: continue
+                val slug = str(t, "slug")
+                val name = str(t, "name")
+                if (slug.isNotBlank() && name.isNotBlank()) tags += Tag(name, slug)
+            }
+            if (tags.isNotEmpty()) {
+                out += TagCategory(str(c, "name").ifBlank { "标签" }, tags)
+            }
+        }
+        return out
+    }
+
+    /** 视频详情的“猜你喜欢”。 */
+    suspend fun related(id: String, size: Int = 12): List<Video> {
+        val data = getJson("/api/videos/${enc(id)}/related?page=1&size=$size")
+            .optJSONObject("data") ?: return emptyList()
+        val arr = data.optJSONArray("items") ?: return emptyList()
+        val out = ArrayList<Video>(arr.length())
+        for (i in 0 until arr.length()) {
+            arr.optJSONObject(i)?.let { out += parseVideo(it) }
+        }
+        return out
     }
 
     suspend fun category(
@@ -152,6 +219,8 @@ object Api {
         val tags = if (tagsArr == null) emptyList() else (0 until tagsArr.length())
             .map { tagsArr.optString(it) }
             .filter { it.isNotBlank() }
+        val counts = o.optJSONObject("counts")
+        val createdAt = str(o, "created_at")
         return Video(
             id = str(o, "video_id").ifBlank { str(o, "id") },
             title = cleanTitle(str(o, "title")),
@@ -161,7 +230,13 @@ object Api {
             desc = str(o, "description"),
             tags = tags,
             episodeCount = maxOf(episodeCount, totalEpisodes),
-            finished = o.optBoolean("is_finished", false)
+            finished = o.optBoolean("is_finished", false),
+            author = o.optJSONObject("author")?.let { str(it, "name") } ?: "",
+            year = createdAt.take(4),
+            hot = counts?.optLong("hot", 0L) ?: o.optLong("hot", 0L),
+            playCount = counts?.optLong("play", 0L) ?: 0L,
+            likeCount = counts?.optLong("like", 0L) ?: 0L,
+            collectCount = counts?.optLong("collect", 0L) ?: 0L
         )
     }
 
@@ -184,6 +259,98 @@ object Api {
         author = o.optJSONObject("author")?.let { str(it, "name") } ?: "",
         content = str(o, "content")
     )
+
+    private fun parseHtmlVideoCards(html: String): List<Video> {
+        val starts = Regex("""<div[^>]*class="[^"]*hg-drama-card[^"]*"[^>]*>""")
+            .findAll(html).map { it.range.first }.toList()
+        val out = ArrayList<Video>(starts.size)
+        for (index in starts.indices) {
+            val end = if (index + 1 < starts.size) starts[index + 1]
+            else minOf(html.length, starts[index] + 9000)
+            if (end <= starts[index]) continue
+            val block = html.substring(starts[index], end)
+            val id = Regex("""data-track-item-id="(\d+)"""").find(block)?.groupValues?.get(1)
+                ?: Regex("""/video/(\d+)/""").find(block)?.groupValues?.get(1)
+                ?: continue
+            val title = cleanTitle(
+                Regex("""hg-drama-card__title[^>]*>(.*?)</h3>""", RegexOption.DOT_MATCHES_ALL)
+                    .find(block)?.groupValues?.get(1)
+                    ?: Regex("""data-track-item-name="([^"]+)"""").find(block)?.groupValues?.get(1)
+                    ?: ""
+            )
+            if (title.isBlank()) continue
+            val cover = Regex("""data-src="([^"]+)"""").find(block)?.groupValues?.get(1)
+                ?: Regex("""src="([^"]+)"""").find(block)?.groupValues?.get(1) ?: ""
+            val episode = cleanTitle(
+                Regex("""hg-drama-card__episode[^>]*>([^<]+)<""").find(block)?.groupValues?.get(1) ?: ""
+            )
+            val score = Regex("""hg-drama-card__score[^>]*>([\d.]+)""").find(block)
+                ?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+            val tags = Regex("""class="hg-tag"[^>]*>([^<]+)<""").findAll(block)
+                .map { cleanTitle(it.groupValues[1]) }
+                .filter { it.isNotBlank() }
+                .take(3)
+                .toList()
+            val episodeCount = Regex("""(\d+)""").find(episode)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+            val finished = episode.contains("全") || episode.contains("完结")
+            val remarks = listOf(episode, if (score > 0) "${score}分" else "")
+                .filter { it.isNotBlank() }
+                .joinToString(" · ")
+            out += Video(
+                id = id,
+                title = title,
+                cover = absUrl(cover),
+                remarks = remarks,
+                score = score,
+                tags = tags,
+                episodeCount = episodeCount,
+                finished = finished
+            )
+        }
+        return out.distinctBy { it.id }
+    }
+
+    private fun parseHtmlPosts(html: String): List<Post> {
+        val starts = Regex("""<a[^>]*class="[^"]*hg-cate-feed__card[^"]*"[^>]*>""")
+            .findAll(html).map { it.range.first }.toList()
+        val out = ArrayList<Post>(starts.size)
+        for (index in starts.indices) {
+            val end = if (index + 1 < starts.size) starts[index + 1]
+            else minOf(html.length, starts[index] + 7000)
+            if (end <= starts[index]) continue
+            val block = html.substring(starts[index], end)
+            val id = Regex("""data-track-item-id="(\d+)"""").find(block)?.groupValues?.get(1)
+                ?: Regex("""/archives/(\d+)/""").find(block)?.groupValues?.get(1)
+                ?: continue
+            val title = cleanTitle(
+                Regex("""hg-cate-feed__title[^>]*>(.*?)</h3>""", RegexOption.DOT_MATCHES_ALL)
+                    .find(block)?.groupValues?.get(1) ?: ""
+            )
+            if (title.isBlank()) continue
+            val cover = Regex("""data-src="([^"]+)"""").find(block)?.groupValues?.get(1) ?: ""
+            val author = cleanTitle(
+                Regex("""hg-cate-feed__author[^>]*>(.*?)</span>""", RegexOption.DOT_MATCHES_ALL)
+                    .find(block)?.groupValues?.get(1) ?: ""
+            )
+            val date = cleanTitle(
+                Regex("""hg-cate-feed__date[^>]*>(.*?)</span>""", RegexOption.DOT_MATCHES_ALL)
+                    .find(block)?.groupValues?.get(1) ?: ""
+            )
+            val intro = cleanTitle(
+                Regex("""hg-cate-feed__intro[^>]*>(.*?)</p>""", RegexOption.DOT_MATCHES_ALL)
+                    .find(block)?.groupValues?.get(1) ?: ""
+            )
+            out += Post(
+                id = id,
+                title = title,
+                cover = absUrl(cover),
+                created = date,
+                author = author,
+                content = intro
+            )
+        }
+        return out.distinctBy { it.id }
+    }
 
     private fun remarks(o: JSONObject): String {
         val parts = mutableListOf<String>()
