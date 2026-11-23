@@ -300,7 +300,7 @@ private fun TvHome(
                                 Spacer(Modifier.height(18.dp))
                             }
                             LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier.fillMaxWidth().weight(1f),
                                 verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
                                 if (nav == 0) {
