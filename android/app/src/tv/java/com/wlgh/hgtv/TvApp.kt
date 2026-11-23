@@ -847,6 +847,7 @@ private fun TvPlayer(video: Video, initialEp: Int, onBack: () -> Unit) {
     var seekPosition by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
     val playFocus = remember { FocusRequester() }
+    val rootFocus = remember { FocusRequester() }
     val context = LocalContext.current
     BackHandler(onBack = onBack)
 
@@ -908,14 +909,20 @@ private fun TvPlayer(video: Video, initialEp: Int, onBack: () -> Unit) {
             seekOsd = false
         }
     }
-    LaunchedEffect(Unit) {
-        delay(350)
-        runCatching { playFocus.requestFocus() }
+    LaunchedEffect(controlsVisible) {
+        delay(80)
+        if (controlsVisible) {
+            runCatching { playFocus.requestFocus() }
+        } else {
+            runCatching { rootFocus.requestFocus() }
+        }
     }
 
     Box(
         Modifier
             .fillMaxSize()
+            .focusRequester(rootFocus)
+            .focusable()
             .background(Color.Black)
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false

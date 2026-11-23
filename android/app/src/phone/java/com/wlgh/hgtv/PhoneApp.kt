@@ -224,14 +224,15 @@ private fun HomeFeed(
     var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        runCatching {
-            featured = Api.featured(20)
-            latest = Api.category("ai-duanju", 1, 20, "latest").items
-            original = Api.original(1, 20).items
-            hot = Api.category("ai-duanju", 1, 20, "hot").items
-            topics = Api.topics()
-            tags = Api.tagCategories().flatMap { it.tags }.take(30)
-        }.onFailure { error = it.message }
+        featured = runCatching { Api.featured(20) }.getOrDefault(emptyList())
+        latest = runCatching { Api.category("ai-duanju", 1, 20, "latest").items }.getOrDefault(emptyList())
+        original = runCatching { Api.original(1, 20).items }.getOrDefault(emptyList())
+        hot = runCatching { Api.category("ai-duanju", 1, 20, "hot").items }.getOrDefault(emptyList())
+        topics = runCatching { Api.topics() }.getOrDefault(emptyList())
+        tags = runCatching { Api.tagCategories().flatMap { it.tags }.take(30) }.getOrDefault(emptyList())
+        if (featured.isEmpty() && latest.isEmpty() && original.isEmpty()) {
+            error = "首页内容加载失败，请检查网络后重试"
+        }
         loading = false
     }
 
