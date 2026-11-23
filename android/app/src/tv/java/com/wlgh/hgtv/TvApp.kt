@@ -357,10 +357,15 @@ private fun TvRailItem(
 ) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) 1.04f else 1f, label = "rail-scale")
+    val bringIntoView = remember { BringIntoViewRequester() }
+    LaunchedEffect(focused) {
+        if (focused) runCatching { bringIntoView.bringIntoView() }
+    }
     Row(
         Modifier
             .fillMaxWidth()
             .graphicsLayer { scaleX = scale; scaleY = scale }
+            .bringIntoViewRequester(bringIntoView)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { focused = it.isFocused }
             .focusable()
